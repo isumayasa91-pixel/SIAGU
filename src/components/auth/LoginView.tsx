@@ -1,21 +1,43 @@
 import React, { useState } from 'react';
-import { Lock, User, AlertCircle, LogIn, GraduationCap, Eye, EyeOff } from 'lucide-react';
+import { Lock, User, AlertCircle, LogIn, GraduationCap, Eye, EyeOff, RefreshCw, CloudCheck } from 'lucide-react';
 import { UserAccount } from '../../types/siagu';
-import { SiaguState } from '../../utils/storage';
+import { SiaguState, fetchServerSiaguData } from '../../utils/storage';
 
 interface LoginViewProps {
   state: SiaguState;
   onLoginSuccess: (user: UserAccount) => void;
+  onRefreshData?: () => void;
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ state, onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ state, onLoginSuccess, onRefreshData }) => {
   const [usernameInput, setUsernameInput] = useState<string>('');
   const [passwordInput, setPasswordInput] = useState<string>('');
   const [showUsername, setShowUsername] = useState<boolean>(true);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<string>('');
 
   const logoSekolah = state.pengaturanSekolah.logoSekolahUrl;
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    setSyncStatus('Mengunduh data terbaru dari Cloud...');
+    try {
+      const serverData = await fetchServerSiaguData();
+      if (serverData && onRefreshData) {
+        onRefreshData();
+        setSyncStatus('Data sekolah & akun terbaru berhasil disinkronkan!');
+      } else {
+        setSyncStatus('Data sekolah sudah yang paling baru.');
+      }
+    } catch {
+      setSyncStatus('Koneksi cloud offline atau gagal sinkron.');
+    } finally {
+      setIsSyncing(false);
+      setTimeout(() => setSyncStatus(''), 4000);
+    }
+  };
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +144,24 @@ export const LoginView: React.FC<LoginViewProps> = ({ state, onLoginSuccess }) =
               {state.pengaturanSekolah.namaKabupaten}
             </p>
           )}
+
+          {/* Cloud Sync Action Button & Status */}
+          <div className="mt-3 flex flex-col items-center justify-center gap-1">
+            <button
+              type="button"
+              onClick={handleManualSync}
+              disabled={isSyncing}
+              className="inline-flex items-center gap-1.5 text-[11px] text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1 rounded-full font-bold transition-all border border-emerald-200/80 cursor-pointer shadow-2xs disabled:opacity-60"
+            >
+              <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin text-emerald-600' : ''}`} />
+              <span>{isSyncing ? 'Menghubungkan...' : 'Sinkronkan Data Cloud'}</span>
+            </button>
+            {syncStatus && (
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50/80 px-2.5 py-0.5 rounded-md">
+                {syncStatus}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Info Banner for Students */}

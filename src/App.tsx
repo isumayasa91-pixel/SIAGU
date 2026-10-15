@@ -62,6 +62,9 @@ function AppContent() {
             ...serverData,
             currentUser: prev.currentUser, // Keep logged in session if active
           }));
+        } else {
+          // If cloud Firestore has no data yet, seed it with current device state
+          saveSiaguData(state);
         }
         isServerSyncedRef.current = true;
       }
@@ -298,7 +301,22 @@ function AppContent() {
 
   // If user is not logged in, show Login Screen
   if (!state.currentUser) {
-    return <LoginView state={state} onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <LoginView
+        state={state}
+        onLoginSuccess={handleLoginSuccess}
+        onRefreshData={() => {
+          fetchServerSiaguData().then((serverData) => {
+            if (serverData) {
+              setState((prev) => ({
+                ...serverData,
+                currentUser: prev.currentUser,
+              }));
+            }
+          });
+        }}
+      />
+    );
   }
 
   return (
