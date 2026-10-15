@@ -36,6 +36,13 @@ import { QrScannerModal } from './components/modals/QrScannerModal';
 import { LoginView } from './components/auth/LoginView';
 import { NotificationProvider, useNotification } from './context/NotificationContext';
 import { getTeacherMapelForKelas, getVisibleKelas } from './utils/guruAssignment';
+import { subscribeToFirestore, db, SIAGU_COLLECTION, CENTRAL_DOC_PATH } from './utils/firebase';
+import { doc, getDocFromServer } from 'firebase/firestore';
+
+// Validate Firestore connection on boot
+getDocFromServer(doc(db, SIAGU_COLLECTION, CENTRAL_DOC_PATH)).catch(() => {
+  // Graceful offline fallback
+});
 
 function AppContent() {
   const [state, setState] = useState<SiaguState>(() => loadSiaguData());
@@ -59,8 +66,32 @@ function AppContent() {
         isServerSyncedRef.current = true;
       }
     });
+
+    // Real-time live synchronization across devices (HP, Laptop, PC)
+    const unsubscribe = subscribeToFirestore((stateJson) => {
+      if (!isMounted) return;
+      try {
+        const cloudData = JSON.parse(stateJson);
+        if (cloudData && Array.isArray(cloudData.siswa)) {
+          setState((prev) => {
+            const currentStr = JSON.stringify({ ...prev, currentUser: null });
+            const remoteStr = JSON.stringify({ ...cloudData, currentUser: null });
+            if (currentStr === remoteStr) return prev;
+
+            return {
+              ...cloudData,
+              currentUser: prev.currentUser, // Preserve logged-in session
+            };
+          });
+        }
+      } catch (err) {
+        console.warn('[Sync] Real-time parse warning:', err);
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, []);
 

@@ -1,0 +1,30 @@
+{
+  "entities": {
+    "SiaguAppData": {
+      "title": "SiaguAppData",
+      "description": "Dokumen database sentral SIAGU untuk sinkronisasi nilai, presensi, jurnal, jadwal, dan akun guru antar perangkat.",
+      "type": "object",
+      "properties": {
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp terakhir diperbarui"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "Nama atau username akun yang memperbarui data"
+        },
+        "stateJson": {
+          "type": "string",
+          "description": "Serialisasi JSON data lengkap SIAGU (akun, pengaturan, siswa, kelas, jadwal, nilai, absensi, jurnal)"
+        }
+      },
+      "required": ["updatedAt", "stateJson"]
+    }
+  },
+  "firestore": {
+    "/siagu_data/{documentId}": {
+      "schema": "SiaguAppData",
+      "description": "Koleksi data utama administrasi SIAGU untuk sinkronisasi lintas perangkat (Laptop, HP, PC)."
+    }
+  }
+}

@@ -22,6 +22,7 @@ import {
   initialAccounts,
   initialPengaturanSekolah,
 } from '../data/initialData';
+import { saveToFirestore, fetchFromFirestore } from './firebase';
 
 const STORAGE_KEY = 'siagu_app_data_v6';
 
@@ -89,12 +90,19 @@ export function saveSiaguDataToLocalOnly(state: SiaguState): void {
 
 export function saveSiaguData(state: SiaguState): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    // Asynchronously push to server for cross-device sync
+    const jsonStr = JSON.stringify(state);
+    localStorage.setItem(STORAGE_KEY, jsonStr);
+
+    // 1. Primary: Save to Firebase Firestore cloud database for global multi-device sync
+    saveToFirestore(jsonStr, state.currentUser?.nama || 'Admin/Guru').catch((err) => {
+      console.warn('[Storage] Firestore save warning:', err);
+    });
+
+    // 2. Secondary backup: push to container server endpoint
     fetch('/api/data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(state),
+      body: jsonStr,
     }).catch(() => {
       // Ignore network errors when offline
     });
@@ -104,6 +112,35 @@ export function saveSiaguData(state: SiaguState): void {
 }
 
 export async function fetchServerSiaguData(): Promise<SiaguState | null> {
+  // 1. Primary Priority: Fetch directly from Firebase Firestore Cloud Database
+  try {
+    const firestoreJson = await fetchFromFirestore();
+    if (firestoreJson) {
+      const data = JSON.parse(firestoreJson);
+      if (data && Array.isArray(data.siswa)) {
+        const cloudState: SiaguState = {
+          currentUser: null, // Keep login prompt active
+          accounts: data.accounts || initialAccounts,
+          pengaturanSekolah: data.pengaturanSekolah || initialPengaturanSekolah,
+          profil: data.profil || initialProfilGuru,
+          kelas: data.kelas || initialKelas,
+          mapel: mergeStandardMapel(data.mapel),
+          siswa: data.siswa || initialSiswa,
+          jadwal: data.jadwal || initialJadwal,
+          absensi: data.absensi || initialAbsensi,
+          nilai: data.nilai || initialNilai,
+          jurnal: data.jurnal || initialJurnal,
+          activeKelasId: data.activeKelasId || '7A',
+        };
+        saveSiaguDataToLocalOnly(cloudState);
+        return cloudState;
+      }
+    }
+  } catch (firestoreErr) {
+    console.warn('[Storage] Fetch from Firestore failed, trying server API:', firestoreErr);
+  }
+
+  // 2. Secondary Fallback: Fetch from container /api/data
   try {
     const res = await fetch('/api/data');
     if (!res.ok) return null;
