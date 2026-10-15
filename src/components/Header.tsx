@@ -191,40 +191,42 @@ export const Header: React.FC<HeaderProps> = ({
             {/* Live Save Status Badge */}
             {lastSavedAt && (
               <div
-                className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[11px] font-bold shadow-2xs"
-                title={`Seluruh data aman. Terakhir disimpan: ${lastSavedAt.toLocaleTimeString('id-ID')}`}
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[11px] font-bold shadow-2xs"
+                title={`Data tersinkron ke Cloud Firestore. Terakhir disimpan: ${lastSavedAt.toLocaleTimeString('id-ID')}`}
               >
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Tersimpan</span>
+                <CloudCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Cloud Sync</span>
               </div>
             )}
 
-            {/* Export/Import & Cloud Save Utilities */}
-            <div className="hidden lg:flex items-center gap-1.5">
+            {/* Cloud Save & Backup Utilities */}
+            <div className="flex items-center gap-1.5">
               <button
                 onClick={handleCloudSave}
-                title="Simpan & Sinkronkan Data ke Server Central (Dapat dibuka di HP/Laptop lain)"
-                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-colors text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+                title="Simpan & Sinkronkan Data ke Cloud Firestore (Bisa dibuka di HP atau Laptop lain)"
+                className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
               >
                 <Save className="w-3.5 h-3.5 text-amber-300" />
                 <span>Simpan Data</span>
               </button>
 
-              <button
-                onClick={onExportBackup}
-                title="Unduh Backup Data JSON"
-                className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-xs font-medium cursor-pointer"
-              >
-                <Download className="w-4 h-4" />
-              </button>
+              <div className="hidden lg:flex items-center gap-1">
+                <button
+                  onClick={onExportBackup}
+                  title="Unduh Backup Data JSON"
+                  className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-xs font-medium cursor-pointer"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
 
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                title="Pulihkan / Impor Data JSON"
-                className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-xs font-medium cursor-pointer"
-              >
-                <Upload className="w-4 h-4" />
-              </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Pulihkan / Impor Data JSON"
+                  className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors text-xs font-medium cursor-pointer"
+                >
+                  <Upload className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="h-6 w-px bg-slate-200 hidden lg:block" />
