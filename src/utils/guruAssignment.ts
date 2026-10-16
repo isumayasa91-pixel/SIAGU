@@ -66,19 +66,13 @@ export function getVisibleKelas(
     }
   });
 
-  // Default demo for guru1 if no schedule found yet
-  if (currentUser.username === 'guru1' || currentUser.email === 'isumayasa91@guru.smp.belajar.id') {
-    classesFromJadwal.add('7A');
-    classesFromJadwal.add('7B');
-  }
-
   if (classesFromJadwal.size > 0) {
     const derived = state.kelas.filter((k) => classesFromJadwal.has(k.id));
     if (derived.length > 0) return derived;
   }
 
-  // If no specific assignment can be found, return the first class as safe default
-  return state.kelas.slice(0, 1);
+  // If no specific assignment has been configured yet, return all classes so teacher is never locked out
+  return state.kelas;
 }
 
 /**
@@ -89,30 +83,66 @@ export function getTeacherMapelForKelas(
   kelasId: string,
   state: SiaguState
 ): MataPelajaran {
-  // 1. Check user.mapelPerKelas dictionary
+  // 1. Check user.mapelPerKelas dictionary for this specific class
   if (currentUser?.mapelPerKelas && currentUser.mapelPerKelas[kelasId]) {
     const targetMapelId = currentUser.mapelPerKelas[kelasId];
     const found = state.mapel.find(
       (m) =>
         m.id.toLowerCase() === targetMapelId.toLowerCase() ||
-        m.kode.toLowerCase() === targetMapelId.toLowerCase()
+        m.kode.toLowerCase() === targetMapelId.toLowerCase() ||
+        m.nama.toLowerCase() === targetMapelId.toLowerCase()
     );
     if (found) return found;
+
+    // Return custom subject if not found in pre-defined list
+    return {
+      id: extractMapelCode(targetMapelId),
+      kode: `${extractMapelCode(targetMapelId)}-01`,
+      nama: targetMapelId,
+      kkm: 75,
+    };
   }
 
-  // 2. Check user.mataPelajaran
+  // 2. Check user.mataPelajaran (primary assigned subject)
   if (currentUser?.mataPelajaran) {
     const code = extractMapelCode(currentUser.mataPelajaran);
     const found = state.mapel.find(
       (m) =>
         m.id.toLowerCase() === code.toLowerCase() ||
         m.kode.toLowerCase() === code.toLowerCase() ||
-        currentUser.mataPelajaran?.toLowerCase().includes(m.nama.toLowerCase())
+        m.nama.toLowerCase() === currentUser.mataPelajaran?.toLowerCase() ||
+        currentUser.mataPelajaran?.toLowerCase().includes(m.nama.toLowerCase()) ||
+        m.nama.toLowerCase().includes(currentUser.mataPelajaran?.toLowerCase() || '')
     );
     if (found) return found;
+
+    return {
+      id: code || 'MAPEL',
+      kode: `${code || 'MPL'}-01`,
+      nama: currentUser.mataPelajaran,
+      kkm: 75,
+    };
   }
 
-  // 3. Check schedule in state.jadwal for this class
+  // 3. Check first item in user.mapelDiampuList
+  if (currentUser?.mapelDiampuList && currentUser.mapelDiampuList.length > 0) {
+    const firstSubject = currentUser.mapelDiampuList[0];
+    const found = state.mapel.find(
+      (m) =>
+        m.id.toLowerCase() === firstSubject.toLowerCase() ||
+        m.nama.toLowerCase() === firstSubject.toLowerCase()
+    );
+    if (found) return found;
+
+    return {
+      id: extractMapelCode(firstSubject),
+      kode: `${extractMapelCode(firstSubject)}-01`,
+      nama: firstSubject,
+      kkm: 75,
+    };
+  }
+
+  // 4. Check schedule in state.jadwal for this class
   const jadwalMatch = state.jadwal.find((j) => j.kelasId === kelasId);
   if (jadwalMatch) {
     const found = state.mapel.find(
@@ -121,14 +151,14 @@ export function getTeacherMapelForKelas(
     if (found) return found;
   }
 
-  // Default fallback to first subject
+  // Safe fallback to first subject in state.mapel
   return state.mapel[0] || { id: 'IPA', kode: 'IPA-01', nama: 'Ilmu Pengetahuan Alam', kkm: 75 };
 }
 
 /**
  * Returns the list of subjects available for a given class.
  * - Admin: All subjects.
- * - Guru: Only the subject(s) taught for this class.
+ * - Guru: All subject(s) taught by the teacher.
  */
 export function getVisibleMapelForKelas(
   currentUser: UserAccount | null | undefined,
@@ -139,8 +169,32 @@ export function getVisibleMapelForKelas(
     return state.mapel;
   }
 
-  const assignedMapel = getTeacherMapelForKelas(currentUser, kelasId, state);
-  return [assignedMapel];
+  const list: MataPelajaran[] = [];
+  const primary = getTeacherMapelForKelas(currentUser, kelasId, state);
+  list.push(primary);
+
+  // If teacher has multiple mapelDiampuList, include all of them
+  if (currentUser.mapelDiampuList && currentUser.mapelDiampuList.length > 0) {
+    currentUser.mapelDiampuList.forEach((mName) => {
+      const existing = state.mapel.find(
+        (m) =>
+          m.id.toLowerCase() === mName.toLowerCase() ||
+          m.nama.toLowerCase() === mName.toLowerCase() ||
+          extractMapelCode(mName).toLowerCase() === m.id.toLowerCase()
+      );
+      const toAdd = existing || {
+        id: extractMapelCode(mName),
+        kode: `${extractMapelCode(mName)}-01`,
+        nama: mName,
+        kkm: 75,
+      };
+      if (!list.some((it) => it.id.toLowerCase() === toAdd.id.toLowerCase())) {
+        list.push(toAdd);
+      }
+    });
+  }
+
+  return list;
 }
 
 /**

@@ -18,11 +18,33 @@ import {
   Eye,
   RotateCcw,
   Sparkles,
+  BookOpen,
+  CheckSquare,
+  Square,
+  Check,
+  Layers,
+  GraduationCap,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SiaguState } from '../../utils/storage';
 import { PengaturanSekolah, ProfilGuru, UserAccount } from '../../types/siagu';
 import { useNotification } from '../../context/NotificationContext';
+
+export const DAFTAR_MAPEL_KURIKULUM = [
+  'Informatika',
+  'Matematika',
+  'IPA (Ilmu Pengetahuan Alam)',
+  'Bahasa Indonesia',
+  'Bahasa Inggris',
+  'Pendidikan Pancasila (PPKn)',
+  'Pendidikan Agama & Budi Pekerti',
+  'IPS (Ilmu Pengetahuan Sosial)',
+  'PJOK (Penjasorkes)',
+  'Seni Budaya',
+  'Bahasa Bali / Daerah',
+  'Prakarya',
+  'Bimbingan Konseling (BK)',
+];
 
 interface PengaturanViewProps {
   state: SiaguState;
@@ -127,12 +149,27 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   const [profNip, setProfNip] = useState<string>(currentUser?.nip || state.profil.nip);
   const [profEmail, setProfEmail] = useState<string>(currentUser?.email || state.profil.email);
   const [profMapel, setProfMapel] = useState<string>(
-    currentUser?.mataPelajaran || state.profil.mataPelajaranUtama
+    currentUser?.mataPelajaran || state.profil.mataPelajaranUtama || 'Informatika'
   );
   const [profPassword, setProfPassword] = useState<string>(currentUser?.password || '123456');
   const [profFotoUrl, setProfFotoUrl] = useState<string>(
     currentUser?.fotoUrl || state.profil.fotoUrl || ''
   );
+
+  // Profil Guru Mapel & Kelas States (Logged-in Guru)
+  const [profKelasDiampu, setProfKelasDiampu] = useState<string[]>(
+    currentUser?.kelasDiampu && currentUser.kelasDiampu.length > 0
+      ? currentUser.kelasDiampu
+      : state.kelas.map((k) => k.id)
+  );
+  const [profMapelList, setProfMapelList] = useState<string[]>(
+    currentUser?.mapelDiampuList && currentUser.mapelDiampuList.length > 0
+      ? currentUser.mapelDiampuList
+      : currentUser?.mataPelajaran
+      ? [currentUser.mataPelajaran]
+      : ['Informatika']
+  );
+  const [customProfMapelInput, setCustomProfMapelInput] = useState<string>('');
 
   // New Account Modal Form State (Admin Only)
   const [isAddAccountOpen, setIsAddAccountOpen] = useState<boolean>(false);
@@ -143,6 +180,13 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
 
   // Edit Account Modal Form State (Admin Only)
   const [editingAccount, setEditingAccount] = useState<UserAccount | null>(null);
+
+  // Dedicated Penugasan Mapel & Kelas Modal State (Admin)
+  const [penugasanAccount, setPenugasanAccount] = useState<UserAccount | null>(null);
+  const [penugasanMapel, setPenugasanMapel] = useState<string>('');
+  const [penugasanMapelList, setPenugasanMapelList] = useState<string[]>([]);
+  const [penugasanKelasList, setPenugasanKelasList] = useState<string[]>([]);
+  const [customMapelInput, setCustomMapelInput] = useState<string>('');
 
   // Excel Guru Upload Modal State (Admin Only)
   const [isExcelGuruModalOpen, setIsExcelGuruModalOpen] = useState<boolean>(false);
@@ -290,13 +334,22 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   const handleSaveProfil = (e: React.FormEvent) => {
     e.preventDefault();
 
+    const primaryMapel = profMapel || (profMapelList[0] || 'Informatika');
+    const finalMapelList = profMapelList.length > 0 ? profMapelList : [primaryMapel];
+
+    // Build mapelPerKelas
+    const mapelPerKelas: Record<string, string> = {};
+    profKelasDiampu.forEach((kId) => {
+      mapelPerKelas[kId] = primaryMapel;
+    });
+
     // Update ProfilGuru
     onUpdateProfilGuru({
       ...state.profil,
       nama: profNama,
       nip: profNip,
       email: profEmail,
-      mataPelajaranUtama: profMapel,
+      mataPelajaranUtama: primaryMapel,
       fotoUrl: profFotoUrl,
     });
 
@@ -310,7 +363,10 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             nip: profNip,
             email: profEmail,
             password: profPassword,
-            mataPelajaran: profMapel,
+            mataPelajaran: primaryMapel,
+            mapelDiampuList: finalMapelList,
+            kelasDiampu: profKelasDiampu,
+            mapelPerKelas,
             fotoUrl: profFotoUrl,
           };
         }
@@ -319,7 +375,63 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
       onUpdateAccounts(updatedAccounts);
     }
 
-    triggerSuccessNotification('Data profil & foto pengguna berhasil disimpan!', 'Profil Pengguna Disimpan');
+    triggerSuccessNotification('Data profil, mata pelajaran, dan kelas yang diampu berhasil disimpan!', 'Profil Pengguna Disimpan');
+  };
+
+  const handleOpenPenugasanModal = (acc: UserAccount) => {
+    setPenugasanAccount(acc);
+    const mainSubject = acc.mataPelajaran || (acc.mapelDiampuList && acc.mapelDiampuList[0]) || DAFTAR_MAPEL_KURIKULUM[0];
+    setPenugasanMapel(mainSubject);
+    setPenugasanMapelList(
+      acc.mapelDiampuList && acc.mapelDiampuList.length > 0
+        ? [...acc.mapelDiampuList]
+        : [mainSubject]
+    );
+    setPenugasanKelasList(
+      acc.kelasDiampu && acc.kelasDiampu.length > 0
+        ? [...acc.kelasDiampu]
+        : state.kelas.map((k) => k.id)
+    );
+    setCustomMapelInput('');
+  };
+
+  const handleSavePenugasan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!penugasanAccount) return;
+
+    const primaryMapel = penugasanMapel || (penugasanMapelList[0] || 'Informatika');
+    const finalMapelList = penugasanMapelList.length > 0 ? penugasanMapelList : [primaryMapel];
+
+    const mapelPerKelas: Record<string, string> = {};
+    penugasanKelasList.forEach((kId) => {
+      mapelPerKelas[kId] = primaryMapel;
+    });
+
+    const updatedAccount: UserAccount = {
+      ...penugasanAccount,
+      mataPelajaran: primaryMapel,
+      mapelDiampuList: finalMapelList,
+      kelasDiampu: penugasanKelasList,
+      mapelPerKelas,
+    };
+
+    const updatedAccounts = state.accounts.map((acc) =>
+      acc.id === updatedAccount.id ? updatedAccount : acc
+    );
+    onUpdateAccounts(updatedAccounts);
+
+    if (currentUser?.id === updatedAccount.id) {
+      onUpdateProfilGuru({
+        ...state.profil,
+        mataPelajaranUtama: primaryMapel,
+      });
+    }
+
+    setPenugasanAccount(null);
+    triggerSuccessNotification(
+      `Penugasan Guru ${updatedAccount.nama} (Mapel: ${primaryMapel}, ${penugasanKelasList.length} Kelas) berhasil disimpan ke cloud!`,
+      'Penugasan Mapel & Kelas Disimpan'
+    );
   };
 
   const handleCreateAccount = (e: React.FormEvent) => {
@@ -1307,14 +1419,167 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
             </div>
 
             {currentUser?.role !== 'siswa' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Mata Pelajaran Utama / Bidang</label>
-                <input
-                  type="text"
-                  value={profMapel}
-                  onChange={(e) => setProfMapel(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
-                />
+              <div className="space-y-4 pt-2 border-t border-slate-100">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-900">
+                        Mata Pelajaran yang Saya Ampu:
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        Pilih satu atau lebih mata pelajaran yang Anda ajarkan di sekolah.
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full font-bold border border-emerald-200">
+                      {profMapelList.length} Mapel Dipilih
+                    </span>
+                  </div>
+
+                  {/* Subject Pills */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {DAFTAR_MAPEL_KURIKULUM.map((m) => {
+                      const isSelected = profMapelList.includes(m);
+                      return (
+                        <button
+                          type="button"
+                          key={m}
+                          onClick={() => {
+                            if (isSelected) {
+                              const filtered = profMapelList.filter((item) => item !== m);
+                              setProfMapelList(filtered);
+                              if (profMapel === m) setProfMapel(filtered[0] || '');
+                            } else {
+                              const updated = [...profMapelList, m];
+                              setProfMapelList(updated);
+                              if (!profMapel) setProfMapel(m);
+                            }
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                            isSelected
+                              ? 'bg-emerald-600 text-white font-bold shadow-xs ring-2 ring-emerald-500/20'
+                              : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {isSelected && <Check className="w-3 h-3" />}
+                          <span>{m}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Input Tambah Mapel Kustom */}
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      placeholder="Tambah Mapel Kustom / Mulok lain..."
+                      value={customProfMapelInput}
+                      onChange={(e) => setCustomProfMapelInput(e.target.value)}
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = customProfMapelInput.trim();
+                        if (trimmed && !profMapelList.includes(trimmed)) {
+                          setProfMapelList([...profMapelList, trimmed]);
+                          if (!profMapel) setProfMapel(trimmed);
+                          setCustomProfMapelInput('');
+                        }
+                      }}
+                      disabled={!customProfMapelInput.trim()}
+                      className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Tambah</span>
+                    </button>
+                  </div>
+
+                  {/* Primary Subject Selection */}
+                  {profMapelList.length > 0 && (
+                    <div className="pt-2 border-t border-slate-200">
+                      <label className="block text-xs font-bold text-slate-800 mb-1">
+                        Mata Pelajaran Utama (Yang tampil di Menu & Rapor):
+                      </label>
+                      <select
+                        value={profMapel}
+                        onChange={(e) => setProfMapel(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                      >
+                        {profMapelList.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Class Assignment Selector */}
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-900">
+                        Rombel / Kelas yang Saya Ampu:
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        Centang kelas tempat Anda mengajar.
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setProfKelasDiampu(state.kelas.map((k) => k.id))}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        Pilih Semua
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProfKelasDiampu([])}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        Kosongkan
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {state.kelas.map((k) => {
+                      const isChecked = profKelasDiampu.includes(k.id);
+                      return (
+                        <label
+                          key={k.id}
+                          className={`p-2.5 rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setProfKelasDiampu([...profKelasDiampu, k.id]);
+                              } else {
+                                setProfKelasDiampu(profKelasDiampu.filter((id) => id !== k.id));
+                              }
+                            }}
+                            className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                          />
+                          <div className="truncate">
+                            <span className="text-xs block leading-tight">{k.namaKelas}</span>
+                            <span className="text-[9px] font-normal text-slate-400 block truncate">
+                              Wali: {k.waliKelas}
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1376,67 +1641,121 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase">
                   <th className="py-3 px-4">Nama Guru / Pengguna</th>
                   <th className="py-3 px-4">Username</th>
-                  <th className="py-3 px-4 text-center">Peran (Role)</th>
-                  <th className="py-3 px-4">Mapel / Bidang</th>
-                  <th className="py-3 px-4">Email</th>
-                  <th className="py-3 px-4 text-center">Aksi & Edit (Admin)</th>
+                  <th className="py-3 px-4 text-center">Peran</th>
+                  <th className="py-3 px-4">Mata Pelajaran yang Diampu</th>
+                  <th className="py-3 px-4">Kelas yang Diampu</th>
+                  <th className="py-3 px-4 text-center">Aksi & Penugasan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
-                {state.accounts.map((acc) => (
-                  <tr key={acc.id} className="hover:bg-slate-50">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
-                          {acc.fotoUrl ? (
-                            <img src={acc.fotoUrl} alt={acc.nama} className="w-full h-full object-cover" />
+                {state.accounts.map((acc) => {
+                  const subjectList = acc.mapelDiampuList && acc.mapelDiampuList.length > 0
+                    ? acc.mapelDiampuList
+                    : acc.mataPelajaran
+                    ? [acc.mataPelajaran]
+                    : [];
+                  const classList = acc.kelasDiampu || [];
+
+                  return (
+                    <tr key={acc.id} className="hover:bg-slate-50">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold overflow-hidden shrink-0">
+                            {acc.fotoUrl ? (
+                              <img src={acc.fotoUrl} alt={acc.nama} className="w-full h-full object-cover" />
+                            ) : (
+                              acc.nama.charAt(0)
+                            )}
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-900 block">{acc.nama}</span>
+                            {acc.nip && <span className="text-[10px] text-slate-400 font-mono">NIP: {acc.nip}</span>}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">{acc.username}</td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                            acc.role === 'admin'
+                              ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                              : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          }`}
+                        >
+                          {acc.role}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1 max-w-[220px]">
+                          {subjectList.length > 0 ? (
+                            subjectList.map((m, idx) => (
+                              <span
+                                key={idx}
+                                className={`text-[11px] font-bold px-2 py-0.5 rounded-lg border ${
+                                  m === acc.mataPelajaran
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {m}
+                              </span>
+                            ))
                           ) : (
-                            acc.nama.charAt(0)
+                            <span className="text-slate-400 italic">Belum diatur</span>
                           )}
                         </div>
-                        <div>
-                          <span className="font-bold text-slate-900 block">{acc.nama}</span>
-                          {acc.nip && <span className="text-[10px] text-slate-400 font-mono">NIP: {acc.nip}</span>}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex flex-wrap gap-1 max-w-[200px]">
+                          {classList.length > 0 ? (
+                            classList.map((kId) => (
+                              <span
+                                key={kId}
+                                className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200"
+                              >
+                                {kId}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[11px] text-slate-500 font-medium bg-slate-100 px-2 py-0.5 rounded-md">
+                              Semua Kelas
+                            </span>
+                          )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{acc.username}</td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
-                          acc.role === 'admin'
-                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                        }`}
-                      >
-                        {acc.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-semibold text-slate-700">
-                      {acc.mataPelajaran || '—'}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600">{acc.email}</td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => handleOpenEditAccountModal(acc)}
-                          className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Data Guru / Akun Ini"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {acc.role !== 'admin' && (
+                            <button
+                              onClick={() => handleOpenPenugasanModal(acc)}
+                              className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                              title={`Atur Mata Pelajaran & Kelas yang diampu oleh ${acc.nama}`}
+                            >
+                              <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>Atur Mapel & Kelas</span>
+                            </button>
+                          )}
 
-                        <button
-                          onClick={() => handleDeleteAccount(acc.id, acc.nama)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Hapus Akun"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button
+                            onClick={() => handleOpenEditAccountModal(acc)}
+                            className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Data Guru / Akun Ini"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteAccount(acc.id, acc.nama)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Hapus Akun"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1817,6 +2136,215 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
                   className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer"
                 >
                   Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Khusus: Atur / Tambah Mata Pelajaran & Kelas yang Diampu Guru (ADMIN) */}
+      {isAdmin && penugasanAccount && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <BookOpen className="w-5 h-5 text-emerald-600" />
+                  <span>Atur Mata Pelajaran & Kelas yang Diampu Guru</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Guru: <b className="text-slate-800">{penugasanAccount.nama}</b> ({penugasanAccount.username}) · {penugasanAccount.nip ? `NIP: ${penugasanAccount.nip}` : 'Non-NIP'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPenugasanAccount(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePenugasan} className="space-y-5">
+              {/* Langkah 1: Pilih / Tambah Mata Pelajaran yang Diampu */}
+              <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-900">
+                    1. Mata Pelajaran yang Diampu (Pilih satu atau lebih):
+                  </label>
+                  <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+                    {penugasanMapelList.length} Mapel Dipilih
+                  </span>
+                </div>
+
+                {/* Subject Pills */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {DAFTAR_MAPEL_KURIKULUM.map((m) => {
+                    const isSelected = penugasanMapelList.includes(m);
+                    return (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => {
+                          if (isSelected) {
+                            const filtered = penugasanMapelList.filter((item) => item !== m);
+                            setPenugasanMapelList(filtered);
+                            if (penugasanMapel === m) {
+                              setPenugasanMapel(filtered[0] || '');
+                            }
+                          } else {
+                            const updated = [...penugasanMapelList, m];
+                            setPenugasanMapelList(updated);
+                            if (!penugasanMapel) {
+                              setPenugasanMapel(m);
+                            }
+                          }
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white font-bold shadow-xs ring-2 ring-emerald-500/20'
+                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {isSelected && <Check className="w-3.5 h-3.5" />}
+                        <span>{m}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Input Tambah Mapel Kustom */}
+                <div className="pt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="Tambah Mapel Kustom / Mulok lain..."
+                    value={customMapelInput}
+                    onChange={(e) => setCustomMapelInput(e.target.value)}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = customMapelInput.trim();
+                      if (trimmed && !penugasanMapelList.includes(trimmed)) {
+                        setPenugasanMapelList([...penugasanMapelList, trimmed]);
+                        if (!penugasanMapel) setPenugasanMapel(trimmed);
+                        setCustomMapelInput('');
+                      }
+                    }}
+                    disabled={!customMapelInput.trim()}
+                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah</span>
+                  </button>
+                </div>
+
+                {/* Primary Subject Selection */}
+                {penugasanMapelList.length > 0 && (
+                  <div className="pt-2 border-t border-slate-200/80">
+                    <label className="block text-xs font-bold text-slate-800 mb-1">
+                      Mata Pelajaran Utama (Yang tampil di Menu & Rapor):
+                    </label>
+                    <select
+                      value={penugasanMapel}
+                      onChange={(e) => setPenugasanMapel(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    >
+                      {penugasanMapelList.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Langkah 2: Pilih Rombel Kelas yang Diampu */}
+              <div className="space-y-2 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-900">
+                      2. Rombel / Kelas yang Diampu:
+                    </label>
+                    <span className="text-[11px] text-slate-500">
+                      Guru hanya akan melihat dan mengelola kelas yang dicentang di bawah ini.
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setPenugasanKelasList(state.kelas.map((k) => k.id))}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      Pilih Semua
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPenugasanKelasList([])}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-500 border border-slate-200 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      Kosongkan
+                    </button>
+                  </div>
+                </div>
+
+                {/* Classes Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+                  {state.kelas.map((k) => {
+                    const isChecked = penugasanKelasList.includes(k.id);
+                    return (
+                      <label
+                        key={k.id}
+                        className={`p-2.5 rounded-xl border flex items-center gap-2.5 cursor-pointer transition-all ${
+                          isChecked
+                            ? 'bg-emerald-50 border-emerald-400 text-emerald-950 font-bold shadow-2xs'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100/70'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setPenugasanKelasList([...penugasanKelasList, k.id]);
+                            } else {
+                              setPenugasanKelasList(penugasanKelasList.filter((id) => id !== k.id));
+                            }
+                          }}
+                          className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <div className="truncate">
+                          <span className="text-xs block leading-tight">{k.namaKelas}</span>
+                          <span className="text-[10px] font-normal text-slate-400 block truncate">
+                            Wali: {k.waliKelas}
+                          </span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Actions Footer */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPenugasanAccount(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={penugasanKelasList.length === 0 || (!penugasanMapel && penugasanMapelList.length === 0)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs flex items-center gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Simpan Penugasan Guru</span>
                 </button>
               </div>
             </form>

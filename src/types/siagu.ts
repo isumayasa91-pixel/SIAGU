@@ -110,7 +110,8 @@ export interface UserAccount {
   mataPelajaran?: string;
   jabatan?: string;
   fotoUrl?: string;
-  kelasDiampu?: string[]; // Daftar ID kelas yang diampu guru, misal: ['7A', '7B']
+  kelasDiampu?: string[]; // Daftar ID kelas yang diampu guru, misal: ['7A', '7B', '8A']
+  mapelDiampuList?: string[]; // Daftar mata pelajaran yang diampu guru, misal: ['Informatika', 'Matematika']
   mapelPerKelas?: Record<string, string>; // Mapel yang diajarkan per kelas, misal: { '7A': 'IPA', '7B': 'IPA' }
 }
 

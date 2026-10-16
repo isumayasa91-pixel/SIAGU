@@ -36,13 +36,7 @@ import { QrScannerModal } from './components/modals/QrScannerModal';
 import { LoginView } from './components/auth/LoginView';
 import { NotificationProvider, useNotification } from './context/NotificationContext';
 import { getTeacherMapelForKelas, getVisibleKelas } from './utils/guruAssignment';
-import { subscribeToFirestore, db, SIAGU_COLLECTION, CENTRAL_DOC_PATH } from './utils/firebase';
-import { doc, getDocFromServer } from 'firebase/firestore';
-
-// Validate Firestore connection on boot
-getDocFromServer(doc(db, SIAGU_COLLECTION, CENTRAL_DOC_PATH)).catch(() => {
-  // Graceful offline fallback
-});
+import { subscribeToFirestore } from './utils/firebase';
 
 function AppContent() {
   const [state, setState] = useState<SiaguState>(() => loadSiaguData());
@@ -62,9 +56,6 @@ function AppContent() {
             ...serverData,
             currentUser: prev.currentUser, // Keep logged in session if active
           }));
-        } else {
-          // If cloud Firestore has no data yet, seed it with current device state
-          saveSiaguData(state);
         }
         isServerSyncedRef.current = true;
       }
@@ -98,15 +89,9 @@ function AppContent() {
     };
   }, []);
 
-  // Sync state to central storage & local storage whenever state updates
+  // Save to local storage whenever state updates (cloud saves happen on explicit actions & Simpan Data)
   useEffect(() => {
-    // Save to local storage
     saveSiaguDataToLocalOnly(state);
-
-    // Only post to cloud server if initial server sync has completed
-    if (isServerSyncedRef.current) {
-      saveSiaguData(state);
-    }
   }, [state]);
 
   // If user is logged in, validate and ensure activeKelasId is within visible/assigned classes
@@ -231,23 +216,59 @@ function AppContent() {
   };
 
   const handleUpdateKelas = (updatedKelas: Kelas[]) => {
-    setState((prev) => ({ ...prev, kelas: updatedKelas }));
+    setState((prev) => {
+      const nextState = { ...prev, kelas: updatedKelas };
+      saveSiaguData(nextState);
+      return nextState;
+    });
     notifySaved('Data Kelas', 'Data rombel/kelas berhasil disimpan.');
   };
 
+  const handleUpdateMapel = (updatedMapel: MataPelajaran[]) => {
+    setState((prev) => {
+      const nextState = { ...prev, mapel: updatedMapel };
+      saveSiaguData(nextState);
+      return nextState;
+    });
+    notifySaved('Mata Pelajaran', 'Daftar mata pelajaran sekolah berhasil disimpan.');
+  };
+
   const handleUpdatePengaturanSekolah = (updated: PengaturanSekolah) => {
-    setState((prev) => ({ ...prev, pengaturanSekolah: updated }));
+    setState((prev) => {
+      const nextState = { ...prev, pengaturanSekolah: updated };
+      saveSiaguData(nextState);
+      return nextState;
+    });
     notifySaved('Pengaturan Sekolah', 'Data sekolah dan logo berhasil disimpan.');
   };
 
   const handleUpdateProfilGuru = (updated: ProfilGuru) => {
-    setState((prev) => ({ ...prev, profil: updated }));
+    setState((prev) => {
+      const nextState = { ...prev, profil: updated };
+      saveSiaguData(nextState);
+      return nextState;
+    });
     notifySaved('Profil Pengguna', 'Data profil & foto berhasil diperbarui.');
   };
 
   const handleUpdateAccounts = (updatedAccounts: UserAccount[]) => {
-    setState((prev) => ({ ...prev, accounts: updatedAccounts }));
-    notifySaved('Akun Pengguna', 'Data akun login berhasil diperbarui.');
+    setState((prev) => {
+      let newCurrentUser = prev.currentUser;
+      if (prev.currentUser) {
+        const found = updatedAccounts.find((a) => a.id === prev.currentUser?.id);
+        if (found) {
+          newCurrentUser = { ...prev.currentUser, ...found };
+        }
+      }
+      const nextState = {
+        ...prev,
+        accounts: updatedAccounts,
+        currentUser: newCurrentUser,
+      };
+      saveSiaguData(nextState);
+      return nextState;
+    });
+    notifySaved('Akun & Penugasan Guru', 'Data akun login dan penugasan mapel/kelas berhasil diperbarui.');
   };
 
   const handleClearAbsensi = () => {
@@ -396,6 +417,7 @@ function AppContent() {
             onUpdateKelas={handleUpdateKelas}
             onUpdateSiswa={handleUpdateSiswa}
             onChangeActiveKelas={handleChangeActiveKelas}
+            onUpdateAccounts={handleUpdateAccounts}
           />
         )}
 
@@ -405,6 +427,7 @@ function AppContent() {
             onUpdatePengaturanSekolah={handleUpdatePengaturanSekolah}
             onUpdateProfilGuru={handleUpdateProfilGuru}
             onUpdateAccounts={handleUpdateAccounts}
+            onUpdateMapel={handleUpdateMapel}
             onClearAbsensi={handleClearAbsensi}
             onClearNilai={handleClearNilai}
             onClearJadwal={handleClearJadwal}
