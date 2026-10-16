@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { SiaguState } from '../../utils/storage';
-import { PengaturanSekolah, ProfilGuru, UserAccount } from '../../types/siagu';
+import { PengaturanSekolah, ProfilGuru, UserAccount, MataPelajaran } from '../../types/siagu';
 import { useNotification } from '../../context/NotificationContext';
 
 export const DAFTAR_MAPEL_KURIKULUM = [
@@ -51,6 +51,7 @@ interface PengaturanViewProps {
   onUpdatePengaturanSekolah: (updated: PengaturanSekolah) => void;
   onUpdateProfilGuru: (updated: ProfilGuru) => void;
   onUpdateAccounts: (updated: UserAccount[]) => void;
+  onUpdateMapel?: (updatedMapel: MataPelajaran[]) => void;
   onClearAbsensi?: () => void;
   onClearNilai?: () => void;
   onClearJadwal?: () => void;

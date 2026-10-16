@@ -19,6 +19,7 @@ import {
   UserAccount,
   PengaturanSekolah,
   ProfilGuru,
+  MataPelajaran,
 } from './types/siagu';
 import { Header } from './components/Header';
 import { Navigation } from './components/Navigation';
@@ -417,7 +418,6 @@ function AppContent() {
             onUpdateKelas={handleUpdateKelas}
             onUpdateSiswa={handleUpdateSiswa}
             onChangeActiveKelas={handleChangeActiveKelas}
-            onUpdateAccounts={handleUpdateAccounts}
           />
         )}
 
