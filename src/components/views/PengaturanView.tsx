@@ -68,6 +68,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   onUpdatePengaturanSekolah,
   onUpdateProfilGuru,
   onUpdateAccounts,
+  onUpdateMapel,
   onClearAbsensi,
   onClearNilai,
   onClearJadwal,
@@ -81,7 +82,7 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
   const isAdmin = state.currentUser?.role === 'admin';
 
   // If not admin, default to 'profil' tab
-  const [activeSubTab, setActiveTool] = useState<'sekolah' | 'kop' | 'profil' | 'akun' | 'sistem'>(
+  const [activeSubTab, setActiveTool] = useState<'sekolah' | 'kop' | 'profil' | 'akun' | 'mapel' | 'sistem'>(
     isAdmin ? 'sekolah' : 'profil'
   );
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
@@ -480,6 +481,78 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
     }
   };
 
+  // Mapel Management State & Handlers (Admin)
+  const [isAddMapelModalOpen, setIsAddMapelModalOpen] = useState<boolean>(false);
+  const [editingMapelId, setEditingMapelId] = useState<string | null>(null);
+  const [formMapelId, setFormMapelId] = useState<string>('');
+  const [formMapelKode, setFormMapelKode] = useState<string>('');
+  const [formMapelNama, setFormMapelNama] = useState<string>('');
+  const [formMapelKkm, setFormMapelKkm] = useState<number>(75);
+
+  const handleOpenAddMapel = () => {
+    if (!isAdmin) return;
+    setEditingMapelId(null);
+    setFormMapelId('');
+    setFormMapelKode('MAPEL-01');
+    setFormMapelNama('');
+    setFormMapelKkm(75);
+    setIsAddMapelModalOpen(true);
+  };
+
+  const handleOpenEditMapel = (m: MataPelajaran) => {
+    if (!isAdmin) return;
+    setEditingMapelId(m.id);
+    setFormMapelId(m.id);
+    setFormMapelKode(m.kode);
+    setFormMapelNama(m.nama);
+    setFormMapelKkm(m.kkm);
+    setIsAddMapelModalOpen(true);
+  };
+
+  const handleSaveMapel = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || !onUpdateMapel) return;
+
+    if (editingMapelId) {
+      const updated = state.mapel.map((m) => {
+        if (m.id === editingMapelId) {
+          return {
+            ...m,
+            kode: formMapelKode,
+            nama: formMapelNama,
+            kkm: formMapelKkm,
+          };
+        }
+        return m;
+      });
+      onUpdateMapel(updated);
+      triggerSuccessNotification(`Mata pelajaran ${formMapelNama} berhasil diperbarui!`, 'Mata Pelajaran Disimpan');
+    } else {
+      const newId = formMapelId.trim().toUpperCase() || formMapelKode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      const newMapel: MataPelajaran = {
+        id: newId,
+        kode: formMapelKode,
+        nama: formMapelNama,
+        kkm: formMapelKkm,
+      };
+      if (state.mapel.some((m) => m.id.toLowerCase() === newMapel.id.toLowerCase())) {
+        notifyError('ID / Kode Mata Pelajaran sudah terdaftar.', 'Gagal Menambah');
+        return;
+      }
+      onUpdateMapel([...state.mapel, newMapel]);
+      triggerSuccessNotification(`Mata pelajaran baru ${formMapelNama} berhasil ditambahkan!`, 'Mata Pelajaran Ditambahkan');
+    }
+    setIsAddMapelModalOpen(false);
+  };
+
+  const handleDeleteMapel = (id: string, nama: string) => {
+    if (!isAdmin || !onUpdateMapel) return;
+    if (confirm(`Hapus mata pelajaran ${nama}?`)) {
+      onUpdateMapel(state.mapel.filter((m) => m.id !== id));
+      notifySuccess(`Mata pelajaran ${nama} berhasil dihapus.`, 'Data Dihapus');
+    }
+  };
+
   // Excel Upload Data Guru Logic
   const handleExcelGuruFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -672,6 +745,21 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
           >
             <ShieldCheck className="w-4 h-4 text-purple-400" />
             <span>Kelola & Upload Data Guru ({state.accounts.length})</span>
+          </button>
+        )}
+
+        {/* Kelola Mata Pelajaran Sub-tab: VISIBLE FOR ADMIN ONLY */}
+        {isAdmin && (
+          <button
+            onClick={() => setActiveTool('mapel')}
+            className={`py-2 px-4 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+              activeSubTab === 'mapel'
+                ? 'bg-slate-900 text-white shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-emerald-400" />
+            <span>Kelola Mata Pelajaran ({state.mapel.length})</span>
           </button>
         )}
 
@@ -2460,6 +2548,165 @@ export const PengaturanView: React.FC<PengaturanViewProps> = ({
         </div>
       )}
 
+      {/* Sub-Tab: Kelola Mata Pelajaran (ADMIN ONLY) */}
+      {isAdmin && activeSubTab === 'mapel' && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-2xs space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-600" />
+                <span>Manajemen Mata Pelajaran Sekolah</span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Tambah, edit, atau hapus mata pelajaran yang diajarkan di sekolah. Data ini sinkron ke seluruh menu guru & rapor.
+              </p>
+            </div>
+
+            <button
+              onClick={handleOpenAddMapel}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tambah Mata Pelajaran</span>
+            </button>
+          </div>
+
+          {/* Table of Subjects */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                  <th className="py-3 px-4">ID / Kode</th>
+                  <th className="py-3 px-4">Nama Mata Pelajaran</th>
+                  <th className="py-3 px-4 text-center">KKM</th>
+                  <th className="py-3 px-4 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs font-medium text-slate-800">
+                {state.mapel.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-50">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-700">{m.id} <span className="text-[10px] text-slate-400 font-normal">({m.kode})</span></td>
+                    <td className="py-3 px-4 font-bold text-slate-900">{m.nama}</td>
+                    <td className="py-3 px-4 text-center">
+                      <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-800 rounded-md font-bold text-[11px] border border-emerald-200">
+                        {m.kkm}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditMapel(m)}
+                          className="p-1.5 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Mata Pelajaran"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMapel(m.id, m.nama)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Hapus Mata Pelajaran"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add/Edit Mata Pelajaran */}
+      {isAdmin && isAddMapelModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-emerald-600" />
+                <span>{editingMapelId ? 'Edit Mata Pelajaran' : 'Tambah Mata Pelajaran Baru'}</span>
+              </h3>
+              <button
+                onClick={() => setIsAddMapelModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveMapel} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">ID Unik Mapel (Singkatan, contoh: BIO, FIS)</label>
+                <input
+                  type="text"
+                  value={formMapelId}
+                  onChange={(e) => setFormMapelId(e.target.value)}
+                  placeholder="Misal: BIO"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono uppercase font-bold text-slate-900"
+                  disabled={Boolean(editingMapelId)}
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Kode Kurikulum (contoh: BIO-01)</label>
+                <input
+                  type="text"
+                  value={formMapelKode}
+                  onChange={(e) => setFormMapelKode(e.target.value)}
+                  placeholder="Misal: BIO-01"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-mono text-slate-800"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Nama Lengkap Mata Pelajaran</label>
+                <input
+                  type="text"
+                  value={formMapelNama}
+                  onChange={(e) => setFormMapelNama(e.target.value)}
+                  placeholder="Misal: Biologi"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">KKM (Kriteria Ketercapaian Minimal)</label>
+                <input
+                  type="number"
+                  value={formMapelKkm}
+                  onChange={(e) => setFormMapelKkm(Number(e.target.value))}
+                  min={0}
+                  max={100}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-bold text-slate-900"
+                  required
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsAddMapelModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold cursor-pointer shadow-xs"
+                >
+                  Simpan Mata Pelajaran
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
+

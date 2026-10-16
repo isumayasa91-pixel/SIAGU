@@ -218,11 +218,28 @@ function AppContent() {
 
   const handleUpdateKelas = (updatedKelas: Kelas[]) => {
     setState((prev) => {
-      const nextState = { ...prev, kelas: updatedKelas };
+      const existingKelasIds = new Set(prev.kelas.map((k) => k.id));
+      const newClasses = updatedKelas.filter((k) => !existingKelasIds.has(k.id));
+
+      let updatedAccounts = prev.accounts;
+      if (newClasses.length > 0) {
+        const newIds = newClasses.map((k) => k.id);
+        updatedAccounts = prev.accounts.map((acc) => {
+          if (acc.role === 'guru' && acc.kelasDiampu && acc.kelasDiampu.length > 0) {
+            return {
+              ...acc,
+              kelasDiampu: Array.from(new Set([...acc.kelasDiampu, ...newIds])),
+            };
+          }
+          return acc;
+        });
+      }
+
+      const nextState = { ...prev, kelas: updatedKelas, accounts: updatedAccounts };
       saveSiaguData(nextState);
       return nextState;
     });
-    notifySaved('Data Kelas', 'Data rombel/kelas berhasil disimpan.');
+    notifySaved('Data Kelas', 'Data rombel/kelas berhasil disimpan & otomatis disinkronkan ke akun guru.');
   };
 
   const handleUpdateMapel = (updatedMapel: MataPelajaran[]) => {
