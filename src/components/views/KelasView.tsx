@@ -44,12 +44,106 @@ export const KelasView: React.FC<KelasViewProps> = ({
   const [formTingkat, setFormTingkat] = useState<number>(7);
   const [formWaliKelas, setFormWaliKelas] = useState<string>(state.profil.nama);
 
-  // Excel Import States
+  // Excel Import States for Siswa
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
   const [targetImportKelasId, setTargetImportKelasId] = useState<string>(state.activeKelasId);
   const [parsedExcelRows, setParsedExcelRows] = useState<any[]>([]);
   const [excelFileName, setExcelFileName] = useState<string>('');
   const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
+
+  // Excel Import States for Kelas
+  const [isImportKelasModalOpen, setIsImportKelasModalOpen] = useState<boolean>(false);
+  const [parsedExcelKelasRows, setParsedExcelKelasRows] = useState<any[]>([]);
+  const [excelKelasFileName, setExcelKelasFileName] = useState<string>('');
+  const [importKelasSuccessMsg, setImportKelasSuccessMsg] = useState<string>('');
+
+  const handleExcelKelasFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setExcelKelasFileName(file.name);
+    const reader = new FileReader();
+
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonRows: any[] = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+        if (jsonRows.length === 0) {
+          notifyError('File Excel data kelas kosong atau format tidak terbaca.', 'File Kosong');
+          return;
+        }
+
+        setParsedExcelKelasRows(jsonRows);
+        notifySuccess(`File Excel berisi ${jsonRows.length} data kelas siap diimpor.`, 'File Berhasil Dibaca');
+      } catch (err) {
+        notifyError('Gagal membaca file Excel data kelas.', 'Kesalahan File');
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleDownloadKelasExcelTemplate = () => {
+    const sampleData = [
+      {
+        'ID Kelas / Kode': '8C',
+        'Nama Kelas': 'Kelas 8C',
+        Tingkat: 8,
+        'Wali Kelas': 'Drs. I Wayan Sudarsa, M.Pd.',
+      },
+      {
+        'ID Kelas / Kode': '9B',
+        'Nama Kelas': 'Kelas 9B',
+        Tingkat: 9,
+        'Wali Kelas': 'Ni Ketut Suartini, M.Pd.',
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Kelas');
+    XLSX.writeFile(workbook, 'Template_Data_Kelas_SIAGU.xlsx');
+    notifySuccess('File template data kelas berhasil diunduh dan disimpan!', 'File Berhasil Disimpan');
+  };
+
+  const handleConfirmKelasExcelImport = () => {
+    if (!isAdmin) return;
+    if (parsedExcelKelasRows.length === 0) return;
+
+    const importedKelasList: Kelas[] = parsedExcelKelasRows.map((row, i) => {
+      const namaKelas = row['Nama Kelas'] || row['Nama'] || row['NAMA'] || `Kelas ${i + 1}`;
+      const id = String(row['ID Kelas / Kode'] || row['ID'] || row['Kode'] || namaKelas.replace(/[^a-zA-Z0-9]/g, ''));
+      const tingkat = Number(row['Tingkat'] || row['TINGKAT'] || 7);
+      const waliKelas = String(row['Wali Kelas'] || row['Wali'] || state.profil.nama);
+
+      return {
+        id: id || `K_${Date.now()}_${i}`,
+        namaKelas,
+        tingkat: isNaN(tingkat) ? 7 : tingkat,
+        waliKelas,
+        tahunAjaran: state.pengaturanSekolah.tahunAjaran,
+        semester: state.pengaturanSekolah.semester,
+      };
+    });
+
+    onUpdateKelas([...state.kelas, ...importedKelasList]);
+    notifySuccess(
+      `Berhasil mengimpor & menyimpan ${importedKelasList.length} kelas baru dari file Excel!`,
+      'File Berhasil Diimpor & Disimpan'
+    );
+    setImportKelasSuccessMsg(
+      `Berhasil mengimpor ${importedKelasList.length} data kelas baru!`
+    );
+    setParsedExcelKelasRows([]);
+    setExcelKelasFileName('');
+    setTimeout(() => {
+      setImportKelasSuccessMsg('');
+      setIsImportKelasModalOpen(false);
+    }, 2000);
+  };
 
   const handleOpenAddKelas = () => {
     if (!isAdmin) {
@@ -256,6 +350,14 @@ export const KelasView: React.FC<KelasViewProps> = ({
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
               <span>Upload Data Excel (Admin)</span>
+            </button>
+
+            <button
+              onClick={() => setIsImportKelasModalOpen(true)}
+              className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-white" />
+              <span>Upload Data Kelas (Excel)</span>
             </button>
 
             <button
@@ -582,6 +684,106 @@ export const KelasView: React.FC<KelasViewProps> = ({
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
                 >
                   Konfirmasi Impor ({parsedExcelRows.length} Siswa)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Upload Excel / CSV Data Kelas (Admin Only) */}
+      {isAdmin && isImportKelasModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <div>
+                <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                  <span>Upload & Impor Data Kelas via Excel (Portal Admin)</span>
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Unggah file Excel (.xlsx, .xls) atau CSV untuk memasukkan daftar rombel/kelas secara massal.
+                </p>
+              </div>
+
+              <button
+                onClick={handleDownloadKelasExcelTemplate}
+                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Unduh Template Excel Kelas</span>
+              </button>
+            </div>
+
+            {importKelasSuccessMsg && (
+              <div className="p-4 bg-emerald-500 text-white rounded-2xl text-xs font-bold text-center mb-4 flex items-center justify-center gap-2 animate-bounce">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>{importKelasSuccessMsg}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* Upload Drop Area */}
+              <div className="border-2 border-dashed border-slate-300 hover:border-emerald-500 p-6 rounded-2xl text-center bg-slate-50/60 transition-colors">
+                <Upload className="w-8 h-8 text-emerald-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-900">
+                  {excelKelasFileName ? `File Terpilih: ${excelKelasFileName}` : 'Klik untuk pilih file Excel (.xlsx / .csv) Data Kelas'}
+                </p>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleExcelKelasFileChange}
+                  className="mt-2 text-xs text-slate-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-slate-900 file:text-white cursor-pointer"
+                />
+              </div>
+
+              {parsedExcelKelasRows.length > 0 && (
+                <div className="space-y-2">
+                  <span className="text-xs font-bold text-slate-700 block">
+                    Pratinjau Data Kelas ({parsedExcelKelasRows.length} baris):
+                  </span>
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 rounded-xl">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="bg-slate-100 font-bold text-slate-700">
+                          <th className="p-2 border-b">No</th>
+                          <th className="p-2 border-b">ID / Kode</th>
+                          <th className="p-2 border-b">Nama Kelas</th>
+                          <th className="p-2 border-b">Tingkat</th>
+                          <th className="p-2 border-b">Wali Kelas</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                        {parsedExcelKelasRows.map((r, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="p-2 font-mono">{i + 1}</td>
+                            <td className="p-2 font-mono font-bold">{r['ID Kelas / Kode'] || r['ID'] || r['Kode'] || '—'}</td>
+                            <td className="p-2 font-bold">{r['Nama Kelas'] || r['Nama'] || '—'}</td>
+                            <td className="p-2">{r['Tingkat'] || 7}</td>
+                            <td className="p-2">{r['Wali Kelas'] || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsImportKelasModalOpen(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmKelasExcelImport}
+                  disabled={parsedExcelKelasRows.length === 0}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold cursor-pointer shadow-xs"
+                >
+                  Konfirmasi Impor ({parsedExcelKelasRows.length} Kelas)
                 </button>
               </div>
             </div>
