@@ -32,11 +32,10 @@ export function isFirestoreQuotaExhausted(): boolean {
   return false;
 }
 
-export function markFirestoreQuotaExhausted(hours: number = 6): void {
+export function markFirestoreQuotaExhausted(hours: number = 24): void {
   try {
     const expireTime = Date.now() + hours * 60 * 60 * 1000;
     localStorage.setItem(QUOTA_STORAGE_KEY, expireTime.toString());
-    console.warn(`[Firebase Firestore] Free tier quota reached. Using high-speed local & server container sync for the next ${hours} hours.`);
   } catch (e) {
     // Ignore storage errors
   }
@@ -73,12 +72,11 @@ export async function saveToFirestore(stateJson: string, updatedBy: string = 'Ad
     if (
       errorStr.includes('resource-exhausted') ||
       errorStr.includes('Quota limit exceeded') ||
-      error?.code === 'resource-exhausted'
+      error?.code === 'resource-exhausted' ||
+      errorStr.includes('PERMISSION_DENIED') ||
+      errorStr.includes('unavailable')
     ) {
-      markFirestoreQuotaExhausted(8);
-      return false;
-    } else {
-      console.warn('[Firebase Firestore] Save note:', errorStr);
+      markFirestoreQuotaExhausted(24);
     }
     return false;
   }
@@ -108,9 +106,11 @@ export async function fetchFromFirestore(): Promise<string | null> {
     if (
       errorStr.includes('resource-exhausted') ||
       errorStr.includes('Quota limit exceeded') ||
-      error?.code === 'resource-exhausted'
+      error?.code === 'resource-exhausted' ||
+      errorStr.includes('PERMISSION_DENIED') ||
+      errorStr.includes('unavailable')
     ) {
-      markFirestoreQuotaExhausted(8);
+      markFirestoreQuotaExhausted(24);
     }
     return null;
   }
@@ -142,9 +142,11 @@ export function subscribeToFirestore(onDataReceived: (stateJson: string) => void
         if (
           errorStr.includes('resource-exhausted') ||
           errorStr.includes('Quota limit exceeded') ||
-          err?.code === 'resource-exhausted'
+          err?.code === 'resource-exhausted' ||
+          errorStr.includes('PERMISSION_DENIED') ||
+          errorStr.includes('unavailable')
         ) {
-          markFirestoreQuotaExhausted(8);
+          markFirestoreQuotaExhausted(24);
         }
       }
     );
