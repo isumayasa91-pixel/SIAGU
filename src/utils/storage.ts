@@ -144,7 +144,11 @@ export async function fetchServerSiaguData(): Promise<SiaguState | null> {
   try {
     const res = await fetch('/api/data');
     if (!res.ok) return null;
-    const data = await res.json();
+    const text = await res.text();
+    if (!text || text.trim().startsWith('<!doctype') || text.trim().startsWith('<html')) {
+      return null;
+    }
+    const data = JSON.parse(text);
     if (data && !data.empty && Array.isArray(data.siswa)) {
       const serverState: SiaguState = {
         currentUser: null, // Keep login prompt active
@@ -164,7 +168,7 @@ export async function fetchServerSiaguData(): Promise<SiaguState | null> {
       return serverState;
     }
   } catch (err) {
-    // Return null if network error
+    // Return null if network or parse error
   }
   return null;
 }
